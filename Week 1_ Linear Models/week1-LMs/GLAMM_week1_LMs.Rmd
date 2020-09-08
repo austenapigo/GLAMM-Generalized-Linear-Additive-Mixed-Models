@@ -1,0 +1,761 @@
+---
+title: 'GLAMM Week 1'
+author: "Devin Gamble, Raine Detmer, Ruby Harris-Gavin"
+date: "7/14/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+<center>
+# Linear Models: Regression and Analysis of Variance (ANOVA)  
+
+<br>  
+![xkcd.com/1725/](xkcd1725.png)  
+
+</center>  
+<br>  
+
+This R-Markdown file serves as a practical companion to the GLAMM Week 1 slides on linear models, regression, and ANOVAs. 
+Provided below is R code demonstrating how to build, analyze, and visualize linear models. We encourage you to work through these examples at your own pace and play around with the code to understand how it works! We assume that you are familiar with base-R language and have at least some familiarity with Tidyverse.  
+
+
+### Contents   
+- Loading Packages & Data 
+- Linear Regression 
+- Assumptions of Linear Regression  
+- ANOVA    
+- Other Fun Stuff  
+- Try it out!  
+
+<br>  
+
+### Load Data & Packages  
+
+```{r echo = FALSE, eval = FALSE}
+#Run the following lines *IF* you don't already have these packages installed
+install.packages("tidyverse")
+install.packages("janitor")
+install.packages("car")
+
+#
+#Optional packages to install
+install.packages("jtools")
+install.packages("ggstance") #the plot_summs function we use later may require you to isntall this package...
+
+install.packages("visreg")
+install.packages("interactions")
+
+```
+
+```{r warning = FALSE, message = FALSE}
+library(tidyverse) #several tidy-friendly packages, including ggplot2
+library(janitor) #tools for formatting dataframe column names
+library(car) #Companion to applied regression package
+
+```
+<br>  
+
+
+#### Our Data  
+
+We'll be working with the built-in '**iris**' dataset. R. A. Fisher's (& Edgar Anderson's) 'iris' data includes measurements (in cm) of 50 *Iris* flowers for each of three species (N = 150) ([wiki page](https://en.wikipedia.org/wiki/Iris_flower_data_set)).  
+
+It has five variables: **sepal_length**, **sepal_width**, **petal_length**, **petal_width**, and **species**. The measurement variables are all numeric and the species variable is a factor.   
+
+```{r}
+#loads the data (built into R) as a dataframe
+iris <- iris %>% 
+  clean_names() #cleans up column names (needs 'janitor' package)
+```
+
+Run This line to view the data in RStudio:  
+```{r eval = FALSE}
+View(iris)
+```
+<br>  
+
+
+It's usually a good idea to take a look at the structure of a dataset before jumping into analyses. Here are just a few things you can check out:  
+```{r}
+#Summary statistics
+summary(iris)
+
+#Histograms for the distribution of numeric (continuous)` variables  
+ggplot(data = iris, aes(x = petal_length)) +
+  geom_histogram(bins = 30, fill = "blue", color = "black") + 
+  scale_y_continuous(expand = c(0,0)) +
+  theme_bw()
+
+#Scatter plots - relationship between two numeric variables
+ggplot(data = iris, aes(x = sepal_length, y = petal_length)) + 
+  geom_point() +
+  theme_bw()
+```
+
+We can also plot these by species
+```{r}
+ggplot(data = iris, aes(x = petal_length, fill = species)) +
+  geom_histogram(bins = 30, color = "black") + 
+  scale_y_continuous(expand = c(0,0)) +
+  theme_bw() +
+  facet_wrap(~species) #splits up histograms by species
+
+ggplot(data = iris, aes(x = sepal_length, y = petal_length)) + 
+  geom_point(aes(color = species), size = 1.5) +
+  theme_bw()
+
+```  
+
+
+*Note*: You can also use base-R functions like `hist()` and `plot()` or `pairs()` for these types of plots.  
+```{r eval = FALSE}
+hist(iris$sepal_length)
+
+plot(iris$sepal_length, iris$petal_length)
+
+pairs(iris[,1:4]) #Look at scatterplots for all variables [species excluded here]
+```
+
+
+<br>  
+
+
+## Simple (OLS) Linear Regression  
+
+Say we want to understand whether a relationship exists between *sepal_length* and *petal_length*. We can build a linear model to do so!  
+```{r}
+iris_lm1 <- lm(petal_length ~ sepal_length, data = iris)
+
+```
+The `lm()` function fits a linear model for us, where *petal_length* is the dependent (response) variable and *sepal_length* is the independent (explanatory) variable, or covariate.  
+
+This simple linear model is described by the formula:  
+
+$Y_i = \beta_0 + \beta_1 X_i + \epsilon_i$ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; where $\epsilon_i$ ~ $N(0, \sigma^2)$  
+<br>  
+
+$Y$ is our response variable, *petal_length*,  
+$X$ is our explanatory variable (or covariate), *sepal_length*,  
+$\beta_0$ is the intercept,    
+$\beta_1$ is the parameter coefficient or slope, which describes the relationship between our explanatory and response variables.  
+$\epsilon$ is the random error (residuals) term, which accounts for differences between observed and predicted $Y$ values. $\epsilon$ is assumed to be Normally distributed with mean 0 and variance $\sigma^2$.  
+
+
+By fitting our data to a linear model, we are attempting to estimate two unknowns: the intercept $\beta_0$ and the coefficient $\beta_1$. Using linear regression, we can examine how the value of *petal_length* depends on the value of *sepal_length*.  
+<br>  
+
+The `summary()` function gives us an output table for a linear regression using the lm formula we made.  
+
+```{r}
+summary(iris_lm1)
+
+```
+This output gives:  
+- Summary statistics on the residuals of our model.  
+- Coefficients for our model's intercept and slope: the parameter estimate, std error, t-value, and p-value.    
+- Residual standard error and degrees of freedom  
+- The $R^2$ value, F-statistic & p-value for the overall model  
+<br>  
+
+**Interpretation**  
+
+*Intercept Estimate*: the average value of petal_length when sepal_length is 0. (Sometimes uninformative)  
+
+*Parameter Estimate* for sepal_length, $\hat\beta_1$: **for every 1 cm increase in sepal_length, we can expect a 1.85843 cm increase in petal_length**. Since  *p* < 0.05, we can say there is a significant effect of sepal_length on petal_length.  
+
+*Residual Standard Error*: the average amount the response variable deviates from the regression line, based on the degrees of freedom.  
+
+*The* $R^2$ value (coeff. of determination) measures how well the model fits the data. Here, an $R^2$ of 0.76 tells us that sepal_length (or our model) explains 76% of variance in petal_length.  
+
+*The F-statistic* and its p-value comes from an F-test that evaluates the overall fit of our model against a hypothetical null model. A large F & low p-value indicate that our model is significant (a relationship exists between $X$ and $Y$). The F-statistic increases with the # of datapoints used.  
+
+**Note**: Magnitudes of the $R^2$ and F-statitics are relative to the data and the models being fit.   
+<br>  
+
+#### More things  
+
+We can also extract certain terms of the output  
+```{r}
+summary(iris_lm1)$r.squared
+
+summary(iris_lm1)$coefficients
+
+#See ?summary.lm for more
+```
+
+
+**Visualizing our model**  
+
+```{r message = FALSE}
+ggplot(data = iris, aes(y = petal_length, x = sepal_length)) +
+  geom_point(size = 2) + 
+  geom_smooth(method = "lm", color = "blue") + #Add a regression line (method = "lm") with confidence interval
+  theme_bw()
+```
+
+
+### Multivariate Linear Regression  
+
+Multiple linear regression is just an extension of simple linear regression with two or more covariates:  
+
+$Y_i = \beta_0 + \beta_1 X_{1i} + \beta_2 X_{2i} + \beta_3 X_{3i} + ... + \beta_{ji} X_{ji}+ \epsilon_i$ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; where $\epsilon_i$ ~ $N(0, \sigma^2)$  
+
+
+Now we are attempting to estimate the intercept $\beta_0$ and $\beta_{j}$ coefficients for each of $j$ covaraites.  
+<br>  
+
+To see how *sepal_length* and *petal_width* influence *petal_length*, we can fit another linear model.  
+```{r}
+iris_lm2 <- lm(petal_length ~ sepal_length + petal_width, data = iris)
+
+summary(iris_lm2)
+
+```
+
+**Try it out**: How would you interpret the output of this multivariate linear regression?
+
+
+*Note*: The adjusted $R^2$ adjusts for the number of variables in the model, whereas the regular $R^2$ does not and increases with every covariate added to a model which may be problematic.  
+<br>  
+
+
+
+## Assumptions of Linear Regression    
+
+
+
+### Linear relationship between the covariates and response  
+We expect the relationship between the response variable and the covariate(s) to be linear. We can check this in scatterplots like those above, or by plotting our model's residuals vs fitted $Y$ values:  
+
+```{r}
+plot(iris_lm2, 1)
+```
+
+The red line would be horizontal at 0 if there were no pattern, but it looks there may be some nonlinear trend in our model.  
+
+
+**Fixes**  
+- Add missing covariates  
+- Variable transformations (`log(x)`, `sqrt(x)`, `x^2`)
+
+
+
+In this case, we can see if adding the *species* variable to our model helps explain the nonlinear pattern we see in petal_length:  
+```{r}
+iris_lm3 <- lm(petal_length ~ sepal_length + petal_width + species, data = iris)
+
+#summary(iris_lm3) #unhash for regression output
+
+plot(iris_lm3, 1)
+
+```
+
+Much better, this looks like a linear relationship!  
+
+<br>  
+
+
+
+### Homoscedasticity (Homogeneity) of Variance  
+
+We can check the assumption of equal variance by comparing the spread of residuals at different $X$ values. Specificially, we can plot the model's standardized residuals against the fitted values of $Y$. The spread should be similar across all fitted values.    
+
+```{r}
+plot(iris_lm3, 3)
+```
+
+The line is roughly horizontal with points spread similar distances from the line, suggesting that the variance of residuals across different values of $X$ is fairly equal.    
+
+
+
+**Fixes**:  
+- Add explanatory covariates  
+- Use a "mean-variance stabilizing" transformation on the response (`log(y)`, `sqrt(y)`)  
+
+
+
+**Note**: The lack of a pattern in model residuals against fitted values (as above) or against any covariate supports the assumption that residuals are independently distributed and uncorrelated.  
+
+<br>  
+
+
+### Residuals are Normally distributed  
+We can check this with histograms (or density plots) and with Q-Q plots:  
+
+```{r}
+plot(iris_lm3, 2)
+```
+
+
+```{r eval = FALSE}
+#The same plot is also produced when running the following two lines together
+qqnorm(iris_lm3$residuals)
+qqline(iris_lm3$residuals)
+```  
+
+This plots the residuals (quantiles) from our model against theoretical (Normal) quantiles to assess normality. Since our points roughly stick to the 1:1 line, we can assume our residuals are normally distributed. Small deviations from normality are usually not a problem.  
+
+*Note*: A model's residuals will usually be normally distributed when the $Y$ variable is normally distributed. A **'U'** shaped Q-Q plot indicates that the data is right (positively) or left (negatively)-skewed. An **'S'** shape can indicate that the data is under or over-dispersed.  
+
+We can also check a histogram of the residuals.  
+```{r message = FALSE}
+#Checking the distribution of residuals with a histogram
+ggplot(data = iris_lm3, aes(x = .resid)) + 
+  geom_histogram(fill = "blue", color = "black") +
+  scale_y_continuous(expand = c(0,0)) +
+  theme_bw()
+
+```
+
+Look's pretty good!  
+  
+
+**Fixes**:  
+- Transform problematic covariates  
+- Add in missing covarites that may explain more variation in the response  
+- Non-normal modeling approaches  
+
+
+**Note**: Another option is the Shapiro-Wilk's test of Normality:  
+```{r eval = FALSE}
+shapiro.test(iris_lm3$residuals)
+#If p > 0.5, we can assume normality (distribution of residuals not different from normal distribution)
+```
+
+<br>  
+
+
+### No Multicollinearity    
+
+Covaraites in a linear model should not be correlated with one another. We can check this by looking at correlations or at VIFs (variance inflation factors) among covariates:  
+```{r}
+cor(iris[,1:4]) #excludes species column
+
+vif(iris_lm2) #model without species variable
+vif(iris_lm3) #model with species
+```
+
+VIF values > 2 (or > 4 according to some) usually indicate some multicollinearity, such that two variables may be highly related and redundant in explaining the response variable. This can lead to erratic changes in coefficient estimates in regression. Including *petal_width* could be a problem in our model.  
+
+
+**Fixes**  
+- Remove covariates with the highest VIFs  
+- Choose fewer highly correlated pairs of covariates  
+
+<br>  
+
+
+
+#### Other things to check   
+
+**Influential Observations/Outliers**
+
+We typically don't expect any single observations to have significant influence on the relationship between covariates and the response variable. We can use a plot of "Cook's Distance" to look for points/outliers that could have exaggerated influence on fitted $Y$ values:  
+
+```{r}
+plot(iris_lm3, 4)
+```  
+
+Typically, an acceptable threshold for Cook's D or influence is 4/N, so observations above .0266 (4/150) in our case may be influencing the fit of our model.  
+
+
+Plotting residuals vs leverage can also help to identify overly influential observations:  
+```{r}
+plot(iris_lm3, 5)
+
+```
+
+There may be one or two observations of large influence (outliers and high leverage), but all points are within the mean Cook's distance (red dashed lines - not shown) so they shouldn't be problematic in our model.  
+
+
+**Fixes**  
+- Points of high influence/leverage can be removed from the data if they have large effects on the regression  
+
+<br>  
+
+
+**No Autocorrelation**  
+This is usually not a problem unless you are working with time-series data. Relates to the assumption that residuals are independent.  
+
+You can check for autocorrelation by plotting the residuals against residuals -1 (lag1) to look for a trend. You can also use the Durbin-Watson test. One possible fix is to add lag1 as a covariate to reduce the effects of autocorrelation in your model.  
+<br>  
+
+
+If you want to **quickly check** some of these linear regression assumptions, you can use `plot(lm)`
+```{r eval = FALSE}
+plot(iris_lm1)
+```
+
+<br>  
+
+
+**In Conclusion**:  
+Normality, a linear relationship, Homoscedasticity, and absence of Multicollinearity (independence) are often the most important assumptions to check for. However, minor deviations from these assumptions usually don't invalidate a model. Aside from the listed potential fixes to more serious violations, more complex modeling approaches (e.g. assuming non-normal distributions) can be useful.  
+
+<br>  
+ 
+
+### Models with Interactions  
+
+In some cases, you may be interested in whether there may be non-independence among explanatory variables, which could interact to influence a response variable. We can include interactions in linear models by adding an interaction term (`:` instead of `+`, or a `*` to specify an interaction term with main effects):  
+```{r}
+iris_lm_int <- lm(petal_length ~ petal_width*sepal_length, data = iris)
+
+summary(iris_lm_int)
+
+```
+
+A significant parameter estimate for an interaction term indicates that these two variables co-dependently influence the value of the response variable. Interpretations of this coefficient, as well as main effects, can be a little trickier and may be easier with some graphical methods.  
+<br>  
+
+
+***  
+
+## ANOVA
+
+Analysis of Variance (ANOVA) is a statistical analysis used to test whether three or more different groups have different means. Like regression, we can also model the effects some explanatory variable has on a response variable, only the explanatory variable is categorical, not numeric.  
+
+### One-Way ANOVA  
+A one-way (single-factor) ANOVA tests whether differences in group means exist for a single factor (using an F-test). In the case of our *Iris* data, for example, we can test whether differences in petal_length exist among the three species:  
+
+```{r}
+iris_lm4 <- lm(petal_length ~ species, data = iris)
+
+anova(iris_lm4)
+
+#summary.aov(iris_lm4)
+#anova() is the same as summary.aov(), but slightly different than the base-R aov()
+```
+The `anova()` function runs a one-way ANOVA on our linear model. The output provides the degrees of freedom, the sum of squares (SS) and the Mean Squares (MS) for the species factor and the residuals, as well as an F statistic and p-value for species.  
+A significant p-value indicates that *one or more* significant differences exist between group means.  
+<br>  
+
+
+When used on a linear model built for ANOVA, the `summary()` function provides an output table similar to those above with our linear regression models. The difference is that with factors/categorical variables, this output uses the intercept as the reference level (species 1) and tests other levels (species 2 & 3) against the reference level. (It does not test the significance of the species factor overall). These "treatment contrasts" are the default in R.  
+```{r}
+summary(iris_lm4)
+
+```
+<br>  
+
+
+#### Tukey's Test  
+
+Since ANOVAs only test whether there a significant differences exists among groups, we can use a Tukey Honest Significant Difference (HSD) test to determine which group means are significantly different from one another:  
+```{r}
+iris_lm4a <- aov(petal_length ~ species, data = iris) 
+#aov is similar to the anova function, but compatible with Tukeys HSD test
+
+TukeyHSD(iris_lm4a)
+
+```
+The output shows **mean-differences between each species pair**. Since p < 0.05 for all pairs, we can say that each species mean petal_length is significantly different from one another.  
+
+We can use a base-R function to plot the results of the TukeyHSD test, or `ggplot()` to compare groups in a boxplot (medians).  
+```{r}
+plot(TukeyHSD(iris_lm4a))
+
+ggplot(data = iris, aes(x = species, y = petal_length)) +
+  geom_boxplot(aes(fill = species)) +
+  theme_bw() + 
+  theme(legend.position = "none")
+
+```
+
+*Note*: If you compare the differences between means in the TukeyHSD plot and the group-level estimates (means) in the `summary()` output, you'll see that they are the same!  
+
+<br>  
+
+
+### Two- or Multi-way ANOVA  
+Like linear regression models with multiple covariates, we can run ANOVAs on linear models with more than one factor.  
+
+Here, let's create a new factor in our iris dataset, based on the width of sepals:  
+```{r}
+iris2 <- iris %>% 
+  mutate(sep_width_f = as.factor(
+    case_when(sepal_width < 3 ~ "narrow",
+              sepal_width >= 3 ~ "wide")))
+
+class(iris2$sep_width_f)
+
+#View(iris2) #unhash to see the new dataframe
+
+```
+Now we have a new variable, a factor called `sep_width_f` with two levels, "narrow" and "wide".  
+
+
+If we're interested in whether mean petal_length differs by species and by plants with narrow versus wide sepals, we can run a two-way ANOVA:  
+
+```{r}
+iris_lm5 <- lm(petal_length ~ species + sep_width_f, data = iris2)
+
+anova(iris_lm5)
+
+```
+
+The ANOVA table indicates that there are significant differences in mean petal length among species and among plants with narrow versus wide sepals.  
+
+**Try it out**  
+Which sepal widths have greater petal lengths?  
+
+How would you visualize these differences in a graph?  
+
+<br>  
+
+
+## Assumptions and diagnostics  
+
+Assumptions of ANOVA with LMs are very similar to those of linear regression. These include:  
+- Homoscedasiticity (Equal variances among groups)  
+- Normality and independence of residuals  
+
+We can check these assumptions using the series of diagnostic plots like we did before:  
+
+```{r}
+plot(iris_lm5)
+
+```
+
+
+*Note*  
+- The `leveneTest()` funcation evaluates the assumption of equal variance among groups.  
+- The Kruskal-Wallis test is a non-parametric alternative to ANOVA when these assumptions are not met (`kruskal.test()`)
+
+<br>  
+
+
+### Sum of Squares (SS) Types  
+
+The type of Sum of squares used can determine the accuracy and interpretability of your ANOVA when you have multiple covariates, interactions between covariates, and when data are unbalanced (unequal # observations across groups).  
+
+
+**Type I SS (Sequential)**  
+Type I SS partitions the overall SS sequentially among covariates; the order of explanatory variables in a model matters. Type I SS can lead to different results with different covariate orders when data are unbalanced.  
+
+
+**Type III SS (Partial)**  
+Type III SS partitions SS for all nested models simultaneously, adjusting for covariate order and interactions. It is more appropriate to use when significant interactions exist.  
+
+
+*Notes*:  
+- **Type II SS** is recommended when you have multiple covariates but significant interactions are not present  
+- It is usually not worth interpreting main effects when interactions are present  
+- These contrasts and SS types also apply to linear regression!  
+- When data are balanced (factors are orthogonal) Types I, II, and III SS give the same results  
+<br>  
+
+To run an ANOVA with Type III SS, it's recommended you change the type of contrasts in R. Instead of comparing factor levels to a reference level (as in treatment contrasts), sum-to-zero (orthogonal) contrasts compare each level to the overall mean. This helps with interpreting the model.  
+```{r eval = FALSE}
+options(contrasts = c("contr.sum", "contr.poly")) #"Sum-to-zero contrasts
+#The default contrasts setting is treatment contrasts in R
+```
+
+
+Unlike `anova()` and `aov()`, the `Anova()` function from the `car` package allows us to test Type II and Type III SS:  
+```{r}
+iris_lm5a <- lm(petal_length ~ species*sep_width_f, data = iris2)
+
+Anova(iris_lm5a, type = 3, contrasts=list(species=contr.sum, sep_width_f=contr.sum)) 
+#Alternative to previous contrast option code: Specifying contrast sums in Anova() for sig. interaction, unbalanced data
+
+Anova(iris_lm5a, type = 2)
+
+#anova(iris_lm5a) 
+#Our data are well balanced, so the Type I anova gives roughly the same results
+
+```
+
+In the case of a linear model with species and sep_width_f, the interaction term is not significant so a Type II ANOVA would be more appropriate than Type III, *if* are data were unbalanced.  
+
+For a far better explanation of SS Types in ANOVA, see: [Anova – Type I/II/III SS explained](http://md.psych.bio.uni-goettingen.de/mv/unit/lm_cat/lm_cat_unbal_ss_explained.html)  
+
+<br>  
+
+
+## ANCOVA  
+An Analysis of Covariance (ANCOVA) compares means of a response variable among 2+ groups while accounting for variability of a **numerical** variable(s). It can be one-way multi-way.  
+It makes the same assumptions as a regular ANOVA, *in addition* to **linearity** between the covariate and response for each level of the factor(s), **homogeneity** of regression slopes across factor levels.  
+
+You can learn more here: [ANCOVA in R](https://www.datanovia.com/en/lessons/ancova-in-r/)  
+
+
+***  
+
+
+## Other Stuff    
+
+*You may need to install some of the packages used in the following code chunks*  
+<br>  
+
+
+### Standardized outputs  
+
+When doing linear regression analysis, you may have explanatory variables that are really different in their measurement units. This can make interpreting their relative effects on a response tricky (though this isn't a huge issue in the iris dataset).  
+
+Standardizing (and mean-centering) input variables can make interpretation and comparison among their effects on a response much simpler. The `jtools` package and the following functions are one method for standardizing parameter estimates.  
+
+```{r warning = FALSE, message = FALSE, eval = FALSE}
+library(jtools)
+
+summ(iris_lm3, scale = TRUE) #the scale argument centers & standardizes the explanatory variables coefficients 
+
+
+
+#Visualize differences in parameter estimates
+plot_summs(iris_lm3, scale = TRUE)
+
+#We can even compare parameter estimates from multiple models
+plot_summs(iris_lm3, iris_lm2, model.names = c("iris_3", "iris_2"), scale = TRUE) 
+
+
+#some compatibility with ggplot
+
+#see ?plot_summs for more
+```
+
+*Note*: These functions are applicable to LMs as well as more complex models.  
+
+<br>  
+
+### Visualizing Regressions  
+
+The `visreg` package and function are really useful for when you want to quickly and cleanly plot the results of a regression model. It parses out the regression coefficients of each explanatory variable and plots them against the response.  
+```{r message = FALSE, warning = FALSE, eval = FALSE}
+library(visreg)
+
+visreg(iris_lm2)
+
+visreg(iris_lm3) 
+
+#You can also visualize models built for ANOVA
+visreg(iris_lm5)
+
+```
+Visreg has functionality and arguments for all kinds of models beyond LMs, and is compatible (kind of?) with ggplot2.  
+
+<br>  
+
+
+
+### Visualizing Interactions  
+
+The `interactions` package and `interact_plot()` is one option for visualizing interaction terms in a linear regression.  
+```{r message = FALSE, warning = FALSE, eval = FALSE}
+library(interactions) #You may need to install this package
+
+interact_plot(iris_lm_int, pred = "petal_width", modx = "sepal_length")
+
+```
+I'm pretty sure there are ways to do this in ggplot, too!  
+
+<br>  
+
+
+### Sources  
+
+[STHDA](http://www.sthda.com/english/articles/39-regression-model-diagnostics/161-linear-regression-assumptions-and-diagnostics-in-r-essentials/)  
+
+[Kyle Edward's Lecture 1](https://drive.google.com/file/d/0B5QCuGKrabF5ZTBFcVFTbmRRUkk/view)  
+
+[Zuur et al. Chapter 2](https://link.springer.com/book/10.1007/978-0-387-87458-6)  
+<br>  
+
+***  
+
+
+## Try it out!  
+
+Ready to try your own linear regression or ANOVA?  
+
+Here's a built-in datasets on the features of 32 cars from 1974:  
+```{r eval = FALSE}
+data(mtcars)
+
+mtcars
+
+?mtcars
+
+```
+
+
+
+### Linear Regression  
+
+Choose a response variable and one or more explanatory variable. Build a linear model and conduct a linear regression in R.  
+
+```{r eval = FALSE, echo = FALSE}
+
+
+```
+
+What do you find?  
+
+
+
+Does your model meet the assumptions of linear regression?  
+
+
+
+Build another model. Can you find any significant interactions among variables?  
+
+
+
+<br>  
+
+
+### ANOVA  
+
+Here's some data on an experiment studying how vitamin C affects tooth growth in 60 Guinea pigs. To run an ANOVA on 'dose', we can change it from a numeric variable to a factor.      
+
+```{r eval = FALSE}
+ToothGrowth <- ToothGrowth %>% 
+  clean_names()%>% 
+  mutate(dose = as_factor(dose))
+
+View(ToothGrowth)
+
+?ToothGrowth
+
+```
+
+
+Using this or other data, create a linear model.  
+
+```{r echo = FALSE, eval = FALSE}
+
+
+
+```
+
+
+
+Run an ANOVA on your model. What do you find?  
+
+
+Does your model meet the assumptions of ANOVA?  
+
+
+Build a model with dose and supplement to run a two-way ANOVA. What do you find?  
+
+<br>  
+
+
+```{r eval = FALSE, echo = FALSE}
+#Other built in datasets include:  
+
+?USArrests
+
+?PlantGrowth
+
+```
+
+
+
+
+
+
+
+

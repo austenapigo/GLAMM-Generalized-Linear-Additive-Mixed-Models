@@ -27,8 +27,11 @@ Statistics Seminar on Generalized, Linear, Additive and Mixed Models by graduate
 
 9. Generalized Dissimilarity Models (GDMs)
    - Austen Apigo & Sophia Arabadjis
-
-
+     
+Sources:
+1. Kyle Edwards Lecture Notes: https://sites.google.com/site/kyleedwardsresearch/lecture-notes
+2. Zurr et al: Mixed Effects Models and Extensions in Ecology with R
+3. Bolker: Ecological Models and Data in R
 
 
 

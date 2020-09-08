@@ -1,0 +1,16 @@
+Type of data,Distribution,Common Ecological Data,Packages,Resources
+Binary or proportional,Binomial,"Binary or proportional (e.g. presence-absence, percents)","glm, glmmTMB","Kyle Edwards lectures 8, 9, 11"
+,Quasi-binomial,Binary or proportional,glmmTMB,"Kyle Edwards lectures 8, 9, 11"
+,Beta or Beta-family,Proportions or percents that are not ones or zeros,"betareg, glmmTMB",Kyle Edwards lecture 11
+Count data,Poisson,Count or abundance data,"stats, glmmTMB","Kyle Edwards lecture 6, 8, 10, 11"
+,Negative Binomial,Count or abundance data with overdispersion,"MASS, glmmTMB","Kyle Edwards lecture 6, 8, 10, 11"
+,Quasi-Poisson,Count or abundance data with overdispersion,glmmTMB,"Kyle Edwards lecture 6, 8, 10, 11"
+,Zero-Inflated Poisson,Count or abundance data with too many zeros,glmmTMB,"Kyle Edwards lecture 6, 8, 10, 11"
+,Zero-Inflated Negative Binomial,Count or abundance data with too many zeros and overdispersion,glmmTMB,"Kyle Edwards lecture 6, 8, 10, 11"
+,Truncated Poisson,Count or abundance data that won't have zeros (e.g. only counted when they were present),glmmTMB,"Kyle Edwards lecture 6, 8, 10, 11"
+,Truncated Negative Binomial,Count or abundance data that won't have zeros and that is overdispersed,glmmTMB,"Kyle Edwards lecture 6, 8, 10, 11"
+,Poisson or negative binomial families with an offset term,"Density data, Count or abundance data with unequal sample sizes","stats, MASS, glmmTMB","Kyle Edwards lecture 9, 11"
+Continuous data,Gaussian,Normal continuous data (e.g. body measurements),"stats, glmmTMB","Kyle Edwards lecture 1, 11"
+,Gamma,Continuous positive data,"stats, glmmTMB",Kyle Edwards lecture 11
+,Tweedie,Continuous data derived from count data (e.g. tree biomasses) that will have too many zeros,glmmTMB,"Kyle Edwards lecture 11, https://doi.org/10.1186/s13021-016-0051-z"
+,Weibull,"survival/failure analysis, wind speed distributions",dweibull,https://www.r-bloggers.com/survival-analysis-fitting-weibull-models-for-improving-device-reliability-in-r/

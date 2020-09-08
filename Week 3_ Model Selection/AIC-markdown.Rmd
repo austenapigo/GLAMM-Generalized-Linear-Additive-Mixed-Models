@@ -1,0 +1,300 @@
+---
+title: "Model Selection with AIC"
+author: "An Bui, Ana Sofia Guerra"
+date: "7/23/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 0. Set up
+```{r warning = FALSE, message = FALSE}
+library(glmmTMB) # to get the Salamanders dataset
+library(tidyverse) # to make your life easier
+library(gt) # to render a table
+library(patchwork) # to put plots together
+library(effects) #install.packages("effects")
+library(jtools)
+
+
+data(Salamanders)
+
+## OPTIONAL ##
+library(remotes) # to install the dataset
+# remotes::install_github("allisonhorst/palmerpenguins") # example dataset
+library(palmerpenguins)
+```
+
+Information taken from Kyle Edwards lectures [15](https://drive.google.com/file/d/0B5QCuGKrabF5ZzFyQ3VXaWNVRXM/view) and [16](https://drive.google.com/file/d/0B5QCuGKrabF5RzYxSEZuc0xoaVU/view) and Allison Horst's [ESM 206 class](https://github.com/allisonhorst/esm-206-lab-9).
+
+## 1. What is model selection?
+
+Model selection will help answer questions/address hypotheses like these:
+
+```{r echo = FALSE}
+q_h <- tribble(
+  ~Question, ~Hypothesis,
+  "1. I have multiple models representing distinct hypotheses; which is best supported by the data?", "Different models represent different hypotheses.",
+  "2. I have a set of predictors that are all hypothesized to be important for the response. Which are supported by the data? What is their relative importance? Should all be included in a single model, or should a smaller model of ‘significant’ predictors be used? How should such a smaller model be chosen?", "Different predictors represent different hypotheses (but a particular model could include one or more predictors)",
+  "3. I have a large number of predictors that may or may not be important, and I want to do an exploratory analysis to see which are best supported by the
+data. How do I construct model(s) to choose among them and quantify their importance?", "Not a hypothesis! Exploratory analysis / data mining / data dredging (not comparing a priori hypotheses, sifting for relationships)."
+) %>% 
+  gt() %>% 
+  tab_style(
+    style = cell_text(size = "small"),
+    locations = cells_body())
+
+q_h
+```
+
+### Why not throw all your model parameters in and see what happens?  
+While tempting, this is a problem for a couple of reasons.  
+1. Your predictors might be **correlated** meaning that predictors are dependent on each other, and their effects on model outputs are driven by how much they are related to each other.  
+2. You may have **parameter uncertainty** meaning that as you add more predictors to your model, the less each predictor explains of the model variation. There is only _so much_ variation to be explained by predictors, and if you put more into your model, the variation attributed to any one predictor will get smaller with more predictors.
+
+## 2. Akaike Information Criterion (AIC)
+
+The AIC was created by [Hirotugu Akaike](https://www.ism.ac.jp/akaikememorial/index-e.html), and is a quantitative way to compare regression models. The AIC takes into account how well the model predicts the data _and_ increasing complexity. In general, the best model "compromises" between these two and strikes a balance between prediction and complexity (i.e. number of explanatory variables). 
+
+We know that models only approximate reality, but we want to know which model approximates reality the _best_. With the AIC, we are quantifying the relative information loss of different models. The formula to do so is:
+$$
+AIC = -2*log(L(\hat{\theta}|Y)) + 2K
+$$
+where $L(\hat{\theta}|Y)$ is the likelihood of fitted parameters $\hat{\theta}$ given the data $Y$, and $K$ is the number of parameters in the model. The AIC number estimates the relative information lost in a particular model. The best model has the smallest AIC number. **NOTE:** having one AIC number (i.e. one model) is meaningless. The AIC works by comparing AIC numbers with others; therefore, one number doesn't mean anything on its own.  
+
+### Bias-corrected AICc:
+If your sample size is small (n < 40ish), you can use the bias-corrected AICc (AIC correction) formulated by [Nariaki Sugiura](https://doi.org/10.1080/03610927808827599):
+$$
+AICc = -2*log(L(\hat{\theta}|Y)) + 2K(\frac{n}{n - K - 1})
+$$
+where $n$ is your sample size. As $n$ gets large relative to $K$, the second term gets closer to $2K$, as in the normal AIC. When $n$ is small relative to $K$, the second term is larger than $2K$, which penalizes more complex models more strongly.
+
+## 3. How to use the AIC
+
+### Penguins
+It is... very easy to use the AIC. The `AIC()` function is in baseR. Hooray! As an example, we're going to use the `penguins` dataset from the Palmer Station LTER in Antarctica, coded up for our using pleasure by [Allison Horst](https://github.com/allisonhorst/palmerpenguins)!
+
+```{r echo = FALSE}
+data(penguins)
+```
+
+These data are measurements of individual penguins of three different species (Adelie, Chinstrap, and Gentoo) from three different islands. Data were taken on bill length (mm), bill depth (mm), flipper length (mm), body mass (g), and sex (male or female), for two years.
+
+Let's start by visualizing the data for fun, with body mass in grams as a function of two different measurements.
+
+```{r echo = FALSE, warning = FALSE, fig.align = 'center'}
+flipper_plot <- ggplot(penguins, aes(x = flipper_length_mm, y = body_mass_g, color = species)) +
+  geom_point(size = 2.5, alpha = 0.8) +
+  scale_color_manual(values = c("#E29244", "#4CA49E", "#6B6D9F")) +
+  theme_bw() +
+  labs(x = "Flipper length (mm)", y = "Body mass (g)", title = "Flipper length", color = "Species") +
+  theme(legend.position = c(0.2, 0.75))
+
+bd_plot <- ggplot(penguins, aes(x = bill_depth_mm, y = body_mass_g, color = species)) +
+  geom_point(size = 2.5, alpha = 0.85) +
+  scale_color_manual(values = c("#E29244", "#4CA49E", "#6B6D9F")) +
+  theme_bw() +
+  labs(x = "Bill depth (mm)", y = "Body mass (g)", title = "Bill depth", color = "Species") +
+  theme(legend.position = "none")
+
+grid <- flipper_plot + bd_plot
+grid
+```
+
+Let's say we're interested in body mass is influenced by these parameters. We come up with linear models to describe these relationships. In Kyle Edwards's framework, we are doing 3) exploratory analysis.  
+
+### a. Linear models
+
+We start by looking at the linear models for a few combinations of parameters, and calculating their AIC values.
+
+```{r}
+# all predictors
+peng_lm1 <- lm(body_mass_g ~ flipper_length_mm + bill_depth_mm + bill_length_mm + sex + species + island + year, data = penguins)
+AIC(peng_lm1)
+
+# 5 predictors
+peng_lm2 <- lm(body_mass_g ~ flipper_length_mm + bill_depth_mm + bill_length_mm + sex + species, data = penguins)
+AIC(peng_lm2)
+
+# 4 predictors
+peng_lm3 <- lm(body_mass_g ~ flipper_length_mm + bill_depth_mm + sex + species, data = penguins)
+AIC(peng_lm3)
+```
+
+### b. Choosing between models
+
+Between these models, the best is `peng_lm2`, which has the lowest AIC value of `r round(AIC(peng_lm2), 2)`. We can calculate the difference between AIC values using
+$$
+\Delta_i = AIC_i - AIC_{min}
+$$
+where $AIC_{min}$ is the smallest AIC value being compared (in this case, `r round(AIC(peng_lm2), 2)`), and $AIC_i$ is the AIC value for the model you want to compare (in this case, the AIC value for `peng_lm3` is `r round(AIC(peng_lm3), 2)`). Therefore, the $\Delta_i$ is `r round(AIC(peng_lm3)-AIC(peng_lm2), 2)`.
+
+However, the AIC value for `peng_lm1` is pretty close to the AIC value for `peng_lm2`. If you have two models with similar AIC values, people generally use this rule to evaluate how much those models support your data _together_:
+```{r echo = FALSE}
+support <- tribble(
+  ~Delta, ~'Level of empirical support for Model i',
+  '0-2', "Substantial",
+  '4-7', "Considerably less",
+  '>10', "Essentially none"
+) %>% 
+  gt() %>% 
+  tab_style(
+    style = cell_text(size = "small"),
+    locations = cells_body())
+
+support
+```
+
+How can we be sure that `peng_lm2` is the best, most simple model that describes the data?
+
+### c. Relative support for each model
+
+We can compare two models, but what if we want to know the relative support for each model? We can do this using the **Akaike weight**, which approximates the likelihood of the model:
+$$
+L(m_i|Y) \sim exp(-\frac{1}{2}\Delta_i)
+$$
+where the likelihood of the model $m_i$ is proportional to $exp(-\frac{1}{2}\Delta_i)$. Basically, we are comparing a set of models and want to know the probability that a model is the best model in the set. To get an Akaike weight, we can standardize the likelihood of the model:
+$$
+w_i = \frac{exp(-\frac{1}{2}\Delta_i)}{\Sigma^R_jexp(-\frac{1}{2}\Delta_i)}
+$$
+where $R$ is the number of models in the set, and $w_i$ is the probability that the model $i$ is the best model. 
+
+If we calculate $\Delta_i$ and $w_i$, we can compare the models.
+
+```{r}
+# calculate deltai2
+delta1 <- exp(-0.5*(AIC(peng_lm1) - AIC(peng_lm2)))
+delta2 <- exp(-0.5*(AIC(peng_lm2) - AIC(peng_lm2)))
+delta3 <- exp(-0.5*(AIC(peng_lm3) - AIC(peng_lm2)))
+
+# sum likelihoods
+sum_likes <- sum(c(delta1, delta2, delta3))
+
+# calculate weights
+weight1 <- delta1/sum_likes
+weight2 <- delta2/sum_likes
+weight3 <- delta3/sum_likes
+```
+
+```{r echo = FALSE}
+weights <- tribble(
+  ~Model,   ~Delta,           ~Weights,
+  "peng_lm1", round(delta1, 2), round(weight1, 2),
+  "peng_lm2", round(delta2, 2), round(weight2, 2),
+  "peng_lm3", round(delta3, 2), round(weight3, 2),
+) %>% 
+  gt() %>% 
+  tab_style(
+    style = cell_text(size = "small"),
+    locations = cells_body())
+
+weights
+```
+
+From this, we can say that `peng_lm2` has the highest weight, but that there's a 35% chance that `peng_lm1` is the best model, and that there is a 6% chance that `peng_lm3` is the best model.
+
+### Salamanders
+
+**FOR TROUBLESHOOTING HERE --> below, why are cover and mined popping up as NA? an artifact of the model selection? something about the data? I'm not sure**
+
+Now let's try this with a different example, the one that Ana and Tatum used last week with GLMs. 
+The Salamander dataset (`glmmTMB` package) from a paper on the effects of mountaintop removal on salamanders in streams ([Price et al. 2015](https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/1365-2664.12585)). 
+
+The dataset structure:  
+
+```{r echo=FALSE, include=FALSE}
+str(Salamanders)
+```
+
+
+**site**: location where repeated samples were taken (23 sites)
+
+**mined**: factor indicating whether the site was affected by mountain top removal coal mining (yes/no)
+
+**cover**: amount of cover objects in the stream (scaled) 
+
+**sample**: repeated sample
+
+**DOP**: Days since precipitation (scaled)
+
+**Wtemp**: water temperature (scaled)
+
+**DOY**: day of year (scaled)
+
+**spp**: abbreviated species and life stage in some cases (17 spp/life stage combos)
+
+**count**: number of salamanders observed  
+
+#### a. Preliminary predictors
+
+For questions involving many predictors, reducing correlation among predictors by droping some predictors would be a win-win, in the sense of avoiding collinearity and also having fewer parameters (Edwards, L. 16)
+
+For the sake of simplifying this example, we are going to pretend that there are no species or life stages of salamanders, and that they are all the same. 
+
+They assume salamanders behave independently within and between sampling occasions.
+
+```{r}
+pairs(~ cover + DOP + DOY+  Wtemp, data=Salamanders)
+```
+There doesn't appear to be any strong correlations between predictors here, so we are left with sample, site, whether the site was mined, cover, DOP, Wtemp, and DOY.
+
+#### b. Choosing the best model
+
+This is our model:
+```{r}
+big.model <- glm(count ~ site + sample + cover + mined + DOP + DOY + Wtemp, data=Salamanders, family="poisson", na.action = na.pass)
+#na.action=na.pass is necessary for the building-all-models function
+```
+
+We could manually include every possible combination of factors, but no one has that kind of time. Luckily, there's a package that is here to help! 
+
+For this, we use the package `MuMIn` which is useful for excluding/including each predictor when you're dealing with a model that has many predictors. 
+
+```{r}
+library(MuMIn) #install.packages("MuMIn")
+```
+
+
+```{r echo=FALSE}
+sal.dredge <- dredge(big.model)
+#this makes all the possible models that are subsets of big.model
+```
+
+Now let's look at all our models using `model.sel(sal.dredge)`. It's a huge table so we have filtered. out to show only models that have $\Delta$ AIC < 3, all ranked by AIC.  
+
+```{r echo=FALSE}
+model.sel(sal.dredge) %>% filter(delta < 3) %>% 
+  gt() %>% 
+  tab_header(title="all model subsets",
+             subtitle = "count ~ site + sample + cover + mined + DOP + DOY + Wtemp")
+```
+Looks like the best model includes `DOY`, `sample`, and `site` as predictors for salamander abundance. 
+
+So now what? 
+
+Edwards suggests three options. 
+
+A) Go off the best (top) model and state that DOY, sample, and site are all important, report effect sizes from this model. 
+*but, if we look at the table we see that there are many models with similar weights.*
+
+B) Use the best (top) model and do LRTs on the predictors to test for `significance.` 
+*but, 1) combining information criteria and null hypothesis tests is not good since they are fundamentally different and results in scary monsters and angry reviewers.* 
+
+*2) it could be seen as data-dredging by doing null-hypothesis tests on predictors that we already know have some pattern in the data*
+
+C) Note that there are many models with similar weights, and that DOY, sample, and site are all in most of the best models so they have support from the data. Use the best model to report coefficient/effect size plots/etc. 
+
+```{r}
+best.model <- glm(count ~ site + sample +DOY, data=Salamanders, family="poisson")
+```
+
+Effect size plots for site, sample, and DOY:  
+```{r}
+effect_plot(model= best.model, pred=site)
+effect_plot(model= best.model, pred=sample)
+effect_plot(model= best.model, pred=DOY)
+```
+
+

@@ -1,0 +1,123 @@
+---
+title: "GLAMorous GLMMS"
+author: "Zoe Zilz"
+date: "8/18/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+```
+
+Largely adapted from Kyle Edward's Lectures 21-22 and Ch. 13 of the Zurr (2009) book.
+
+Luckily, most of the footwork for GLMMs has already been done for us, thanks to Tatum and Ana (GLMs) + Robert and Mallory (LMMs). We will be putting the two concepts together and showing you some fun and informative ways to visualize model predictions!  
+  
+Robert and Mallory walked us very nicely through when we would need to use a mixed model structure, incorporating both random and fixed effects, but as a reminder, we incorporate random effects in the following situations:  
+1. Nested/hierarchical model structure  
+2. Inherently clustered data  
+3. Repeated measurements  
+  
+Unfortunately for ecologists, our data is usually complicated beyond even the above. Assuming a Gaussian distribution simply doesn't work for most of the types of data we collect.  
+  
+Is my sampling design nested, clustered, or repeated?  
+What <i>kind</i> of data do I collect? Count data? Presence/absense? Proportions/percents? Data with non-normal variance/error structure?  
+  
+If the answer to both is YES! then you need generalized linear mixed models.  
+ 
+Required Packages:
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+require(lme4)
+require(tidyverse)
+require(effects)
+require(lattice)
+```
+Data for these examples was obtained from Zurr et al (2009) via: https://highstat.com/index.php/mixed-effects-models-and-extensions-in-ecology-with-r
+
+##Part 1: Binary Data (0s and 1s)  
+  
+###Data: Farmed deer + worms data from Zurr et al (2009), analysis repeated in Edwards lectures
+```{r}
+# import data and make nice 
+deer <- read.table(file = "DeerEcervi.txt", header = TRUE, dec = ".") %>% 
+  mutate(infected = if_else(Ecervi > 0, 1, 0)) # adds a column of 0/1 -- 0 if # worms < 0, 1 if > 0
+head(deer)
+```
+Things to note:  
+- This data is super unbalanced. Some farms sampled a lot of deer and others very few.  
+- All of the intellectual information you need to run a GLMM on these data is already in your brain (or, if it's fallen out, it's in Ana/Tatum and Robert/Mallory presentations). You just need to combine what we already know about LMMs and GlMs.  
+
+###1a. Explore data
+We can make a table that shows us the proportion of infected deer by farm, which is going to be our grouping (random) variable
+```{r}
+tapply(deer$infected, deer$Farm, mean)
+```
+Looks like a lot of variance, so we are pretty justified in including "Farm" as a random variable.
+
+Now we want to know if/how sex and size affect the probability of a deer being infected. We can explore both before choosing our model.
+```{r}
+# sex 
+tapply(deer$infected, deer$Sex, mean) # returns a table of mean likelihood (proportion) of infection by sex
+with(deer, scatter.smooth(Sex, infected)) # nonparametric smoother showing relationship between sex and proportion infected. This doesn't really tell us much because sex is binary but I like the visual. You can also make a boxplot if you're a boxplot kind of person.
+
+# size
+with(deer, scatter.smooth(Length, infected)) # same nonparametric smoother, more informative this time because length is a continuous variable
+```
+  
+Looks like being female has an average positive effect on likelihood of infection. Same with increasing deer size.    
+
+###1b. Model  
+Now we get to determine our model structure. Here, Kyle Edwards centered the length data around the mean to allow for some biological realism when interpreting parameter values, so we will do the same:    
+```{r}
+deer$Length = deer$Length - mean(deer$Length) # we could have also piped this in at the beginning but I forgot so
+```
+  
+We will use the function "glmer" from package lme4 to generate our model. Personally, I like giving my models funny names because it helps me remember them amongst a sea of code.  
+
+```{r}
+deerwormz <- glmer(infected ~ Sex * Length + (1|Farm), data = deer, family = binomial)
+```
+Hopefully this syntax is familiar to you by now, but the + (1|Farm) indicates that we've added "Farm" as a random variable.   
+We are using a logit link to account for the binomial nature of our data (0, 1). This allows for the random effect to follow a normal distribution on the logit link function scale, and not the scale of our data.   
+  
+###1c. Interpret
+Let's look at the model summary!  
+```{r}
+summary(deerwormz)
+```
+When interpreting these outputs, I like to completely ignore p-values, since they are based on a z-statistic. We can assess the relative importance of our random "Farm" effect by comparing the standard deviance (1.55) to the probability that an average female deer would be infected.  
+We find this by looking for the intercept value (remember the data is centered on average length, so intercept is average), and reverting it to the original scale (not logit scale):  
+$$
+\frac{exp(0.31)}{(1 + exp(0.31))} = 0.57
+$$
+  
+That's a lot of error comparitively, so we know that a lot of variance can be explained by which farm the deer is on. We can visualize this variance using a dotplot:
+```{r}
+dotplot(ranef(deerwormz, condVar = T)) #condVar adds 95% confidence intervals around random effects estimates
+```
+  
+We can easily visualize the model predictions if we want using `plot(allEffects(deerwormz))` but I find it more informative to combine the random effects and fixed effects to visualize how the model is predicting deer infection. Kyle Edwards codes this with a for loop as follows (I'll annotate the best I can):
+```{r}
+random.intercepts = ranef(deerwormz)$Farm[["(Intercept)"]] # create vector of random intercepts by pulling them from model
+farm.intercepts = fixef(deerwormz)[1] + random.intercepts # create intercepts estimates by adding effects together
+
+#for loop creating each individual curve ~ farm
+for (i in 1:length(random.intercepts)) {
+  
+  if (i ==1) curve(exp(farm.intercepts[i] + fixef(deerwormz)["Length"]*x)/
+                     (1 + exp(farm.intercepts[i] + fixef(deerwormz)["Length"]*x)),
+                   from = min(deer$Length), to = max(deer$Length), ylim = c(0,1), 
+                   xlab = "Centered Length", ylab = "Probability of Infection")
+  
+  if (i > 1) curve(exp(farm.intercepts[i] + fixef(deerwormz)["Length"]*x)/
+                     (1 + exp(farm.intercepts[i] + fixef(deerwormz)["Length"]*x)),
+                   add = T)
+}
+```
+
+##Part 2: Count Data (Poisson)
+... TO BE CONTINUED

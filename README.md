@@ -1,5 +1,5 @@
 # GLAMM-Generalized-Linear-Additive-Mixed-Models
-Statistics Seminar on Generalized, Linear, Additive and Mixed Models by graduate students in the Department of Ecology, Evolution and Marine Biology at the University of California, Santa Barbara (Summer 2020)
+Statistics Seminar on Generalized, Linear, Additive and Mixed Models by graduate students in the Department of Ecology, Evolution and Marine Biology & Department of Geography at the University of California, Santa Barbara (Summer 2020)
 
 1. Linear models (LMs)
    - Raine Detmer, Ruby Harris-Gavin and Devin Gamble
